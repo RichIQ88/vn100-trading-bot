@@ -18,6 +18,13 @@ from sector_data import get_sector, check_sector_limit, get_sector_breakdown
 from notifier import send_telegram_alert, send_telegram_alert_with_status, send_telegram_photo, get_telegram_credentials
 from monthly_report import generate_monthly_report
 from backtest import calculate_performance_metrics
+from ai_assistant import (
+    build_stock_context,
+    call_gemini_api,
+    generate_fallback_analysis,
+    get_gemini_api_key,
+    SYSTEM_BROKER_INSTRUCTION
+)
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
@@ -105,12 +112,13 @@ lookback_days = st.sidebar.slider("Số phiên quét gần nhất", min_value=1,
 st.markdown('<div class="main-header">🚀 HỆ THỐNG CỐ VẤN GIAO DỊCH VN100</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Quản lý khuyến nghị, tối ưu hóa điểm vào RS Leader, quản trị rủi ro danh mục và định cỡ vị thế</div>', unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "💼 Vị Thế Đang Mở & Ngành",
     "🔔 Quét Tín Hiệu (RS Leader)",
     "💰 Quản Trị Vốn (Position Sizer)",
     "📊 Hiệu Suất Hệ Thống (8 Năm)",
-    "📜 Báo Cáo Tháng Khách Hàng"
+    "📜 Báo Cáo Tháng Khách Hàng",
+    "🧠 Trợ Lý AI Research & Tư Vấn"
 ])
 
 # ----------------- TAB 1: LIVE POSITIONS & SECTOR -----------------
@@ -386,3 +394,109 @@ with tab5:
                         st.error(f"❌ Không thể gửi tới Telegram:\n\n{send_msg}")
             else:
                 st.warning(f"Không có dữ liệu hoặc không phát sinh giao dịch nào trong tháng {sel_month}.")
+
+# ----------------- TAB 6: AI BROKER CO-PILOT -----------------
+with tab6:
+    st.markdown("### 🧠 Trợ Lý Phân Tích & Nghiên Cứu Đầu Tư AI (Broker Co-Pilot)")
+    st.caption("Trợ lý trí tuệ nhân tạo chuyên sâu cho Môi giới: Tự động nạp dữ liệu định lượng, săn Catalyst Gap, phản biện rủi ro và soạn bản tin Room VIP.")
+
+    if "ai_messages" not in st.session_state:
+        st.session_state.ai_messages = [
+            {"role": "assistant", "content": "👋 Xin chào! Tôi là **VN100 Broker Co-Pilot**. Hãy chọn một mã cổ phiếu ở trên để tôi phân tích chuyên sâu hoặc bạn có thể đặt bất kỳ câu hỏi nào về thị trường!"}
+        ]
+
+    col_ai_top1, col_ai_top2 = st.columns([1, 2])
+    with col_ai_top1:
+        ai_symbol = st.selectbox("Chọn mã cổ phiếu cần nghiên cứu:", all_csvs, index=all_csvs.index("FPT") if "FPT" in all_csvs else 0, key="ai_stock_select")
+    with col_ai_top2:
+        saved_key = get_gemini_api_key()
+        custom_api_key = st.text_input(
+            "Google Gemini API Key (Miễn phí tại aistudio.google.com):",
+            value=saved_key,
+            type="password",
+            placeholder="Dán Gemini API Key vào đây (hoặc để trống để dùng Bộ Phân Tích Định Lượng Tích Hợp)",
+            help="Hệ thống ưu tiên dùng API Key bạn nhập hoặc cấu hình trong Secrets GEMINI_API_KEY."
+        )
+
+    st.markdown("##### ⚡ Phân Tích 1-Chạm Nhanh Cho Mã Đã Chọn:")
+    btn_c1, btn_c2, btn_c3, btn_c4 = st.columns(4)
+    trigger_action = None
+    with btn_c1:
+        if st.button("📊 Phân Tích Kỹ Thuật & Dòng Tiền", use_container_width=True):
+            trigger_action = "technical"
+    with btn_c2:
+        if st.button("🕵️ Săn Catalyst Gap", use_container_width=True):
+            trigger_action = "catalyst"
+    with btn_c3:
+        if st.button("😈 Phản Biện Rủi Ro (Devil's Advocate)", use_container_width=True):
+            trigger_action = "devil"
+    with btn_c4:
+        if st.button("📢 Soạn Khuyến Nghị Room VIP", use_container_width=True):
+            trigger_action = "room_vip"
+
+    # Xử lý khi bấm nút 1-chạm
+    if trigger_action:
+        ctx = build_stock_context(ai_symbol)
+        if ctx:
+            user_label = {
+                "technical": f"Yêu cầu phân tích Kỹ thuật & Dòng tiền cho mã {ai_symbol}",
+                "catalyst": f"Săn lùng Catalyst Gap và triển vọng kỳ vọng cho mã {ai_symbol}",
+                "devil": f"Đóng vai phản biện rủi ro (Devil's Advocate): Tại sao KHÔNG NÊN mua {ai_symbol}?",
+                "room_vip": f"Soạn tin nhắn khuyến nghị lướt sóng T+ chuyên nghiệp cho mã {ai_symbol} gửi Room VIP"
+            }.get(trigger_action, f"Phân tích {ai_symbol}")
+
+            st.session_state.ai_messages.append({"role": "user", "content": user_label})
+
+            with st.spinner(f"Đang bóc tách dữ liệu và nhờ AI phân tích {ai_symbol}..."):
+                active_key = custom_api_key.strip() if custom_api_key else saved_key
+                response_text = None
+                if active_key:
+                    sys_prompt = f"{SYSTEM_BROKER_INSTRUCTION}\n\n[DỮ LIỆU ĐỊNH LƯỢNG THỰC TẾ MÃ {ai_symbol}]:\n{json.dumps(ctx, ensure_ascii=False, indent=2)}"
+                    prompt = f"Hãy thực hiện yêu cầu: {user_label} đối với cổ phiếu {ai_symbol} dựa trên các dữ liệu định lượng thực tế đã cung cấp."
+                    response_text = call_gemini_api(prompt, system_prompt=sys_prompt, api_key=active_key)
+                
+                if not response_text:
+                    response_text = generate_fallback_analysis(ctx, trigger_action)
+
+                st.session_state.ai_messages.append({"role": "assistant", "content": response_text})
+                st.rerun()
+
+    # Hiển thị lịch sử chat
+    st.markdown("---")
+    for m in st.session_state.ai_messages:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    # Ô nhập chat tự do
+    user_query = st.chat_input("Nhập câu hỏi hoặc yêu cầu phân tích tự do cho AI (Ví dụ: Đánh giá triển vọng ngành Thép quý này?)...")
+    if user_query:
+        st.session_state.ai_messages.append({"role": "user", "content": user_query})
+        with st.spinner("AI đang tư duy và phân tích..."):
+            active_key = custom_api_key.strip() if custom_api_key else saved_key
+            response_text = None
+            ctx = build_stock_context(ai_symbol)
+            if active_key:
+                sys_prompt = f"{SYSTEM_BROKER_INSTRUCTION}\n\n[DỮ LIỆU ĐỊNH LƯỢNG MÃ ĐANG CHỌN {ai_symbol}]:\n{json.dumps(ctx, ensure_ascii=False, indent=2) if ctx else 'Không có dữ liệu'}"
+                response_text = call_gemini_api(user_query, system_prompt=sys_prompt, api_key=active_key)
+
+            if not response_text:
+                if ctx and any(word in user_query.upper() for word in ["RỦI RO", "KHÔNG NÊN", "BÁN", "XẤU"]):
+                    response_text = generate_fallback_analysis(ctx, "devil")
+                elif ctx and any(word in user_query.upper() for word in ["ROOM", "VIP", "KHUYẾN NGHỊ", "PHÍM"]):
+                    response_text = generate_fallback_analysis(ctx, "room_vip")
+                elif ctx:
+                    response_text = generate_fallback_analysis(ctx, "technical")
+                else:
+                    response_text = "Vui lòng chọn một mã cổ phiếu hợp lệ trong rổ VN100 hoặc nhập Gemini API Key để trò chuyện tự do về mọi chủ đề vĩ mô!"
+
+            st.session_state.ai_messages.append({"role": "assistant", "content": response_text})
+            st.rerun()
+
+    col_rst1, col_rst2 = st.columns([1, 5])
+    with col_rst1:
+        if st.button("🗑️ Xóa Lịch Sử Chat"):
+            st.session_state.ai_messages = [
+                {"role": "assistant", "content": "Lịch sử chat đã được làm mới. Tôi sẵn sàng cho phiên nghiên cứu mới!"}
+            ]
+            st.rerun()
+
