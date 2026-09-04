@@ -1,0 +1,48 @@
+📊 <b>BÁO CÁO HIỆU SUẤT GIAO DỊCH THÁNG 2024-03</b>
+<i>Hệ thống Định lượng VN100 | Bollinger Bands & Volume T+</i>
+━━━━━━━━━━━━━━━━━━━━
+
+📈 <b>TỔNG QUAN HIỆU SUẤT THÁNG:</b>
+• Tổng số khuyến nghị: <b>8 lệnh</b>
+• Lệnh thắng: <b>3</b> | Lệnh cắt lỗ: <b>5</b>
+• Tỷ lệ thắng (Win Rate): <b>37.5%</b>
+• Tổng PnL ròng tích lũy: 🔴 <b>-2.45%</b>
+• Hiệu suất trung bình/lệnh: <b>-0.31%</b>
+• Hệ số Lợi nhuận (Profit Factor): <b>0.87</b>
+• Thời gian nắm giữ trung bình: <b>5.2 phiên (T+)</b>
+
+🏆 <b>GIAO DỊCH NỔI BẬT:</b>
+• Thắng tốt nhất: <b>MWG (+5.60%)</b>
+• Kiểm soát rủi ro: <b>KOS (-4.40%)</b>
+
+📋 <b>CHI TIẾT DANH MỤC THỰC HIỆN:</b>
+1. ✅ <b>MWG</b>: +5.60%
+   • Vào: <code>46.71</code> (21/03) ➜ Ra: <code>49.51</code> (28/03)
+   • Thời gian giữ: 5 phiên | Lý do: Take Profit
+2. ✅ <b>DCM</b>: +5.60%
+   • Vào: <code>28.56</code> (27/02) ➜ Ra: <code>30.27</code> (08/03)
+   • Thời gian giữ: 8 phiên | Lý do: Take Profit
+3. ✅ <b>DBC</b>: +5.60%
+   • Vào: <code>19.50</code> (11/03) ➜ Ra: <code>20.67</code> (14/03)
+   • Thời gian giữ: 3 phiên | Lý do: Take Profit
+4. ❌ <b>BCM</b>: -1.65%
+   • Vào: <code>62.36</code> (20/02) ➜ Ra: <code>61.58</code> (01/03)
+   • Thời gian giữ: 8 phiên | Lý do: Time Exit
+5. ❌ <b>DIG</b>: -4.40%
+   • Vào: <code>23.78</code> (08/03) ➜ Ra: <code>22.83</code> (13/03)
+   • Thời gian giữ: 3 phiên | Lý do: Stop Loss
+6. ❌ <b>MBB</b>: -4.40%
+   • Vào: <code>12.38</code> (05/03) ➜ Ra: <code>11.88</code> (11/03)
+   • Thời gian giữ: 4 phiên | Lý do: Stop Loss
+7. ❌ <b>BMP</b>: -4.40%
+   • Vào: <code>92.29</code> (13/03) ➜ Ra: <code>88.60</code> (18/03)
+   • Thời gian giữ: 3 phiên | Lý do: Stop Loss
+8. ❌ <b>KOS</b>: -4.40%
+   • Vào: <code>40.05</code> (12/03) ➜ Ra: <code>38.45</code> (22/03)
+   • Thời gian giữ: 8 phiên | Lý do: Stop Loss
+
+💡 <b>ĐỊNH HƯỚNG THÁNG TỚI:</b>
+• Tiếp tục tuân thủ kỷ luật quản trị vốn (tối đa 20-25% NAV/mã).
+• Kiên nhẫn chờ đợi tín hiệu cạn cung và rút chân trục giữa SMA20.
+━━━━━━━━━━━━━━━━━━━━
+<i>Báo cáo được tổng hợp tự động bởi VN100 Trading Bot.</i>

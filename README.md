@@ -1,101 +1,56 @@
-# VN100 Trading Signal Bot (Bollinger Bands & Volume T+)
+# VN100 Quant Trading & Advisory Bot (Bollinger Bands & Volume T+)
 
-Hệ thống cung cấp tín hiệu giao dịch cổ phiếu ngắn hạn (Lướt sóng T+ từ vài ngày đến 2-3 tuần) trên danh mục **VN100** sử dụng khung thời gian Daily và tổ hợp 5 công cụ chỉ báo kỹ thuật:
+Hệ thống cung cấp tín hiệu giao dịch cổ phiếu ngắn hạn (Lướt sóng T+ từ vài ngày đến 1-2 tuần) trên danh mục **VN100** sử dụng khung thời gian Daily và tổ hợp 5 công cụ chỉ báo kỹ thuật:
 1. **Bollinger Bands** (Dải trên, Dải giữa SMA20, Dải dưới)
 2. **Bollinger Bands %B** (Vị trí tương đối của giá trong dải)
-3. **Bollinger Bands Width** (Đo lường biên độ nén thắt nút cổ chai / co thắt dải băng)
+3. **Bollinger Bands Width** (Đo lường biên độ nén thắt nút cổ chai)
 4. **Volume & Volume MA20** (Khối lượng dòng tiền so với trung bình 20 phiên)
-5. **MA xu hướng ngắn ngày** (EMA9 kết hợp lọc xu hướng trung hạn SMA50)
+5. **MA xu hướng ngắn ngày** (EMA9 kết hợp bộ lọc xu hướng trung hạn SMA50)
 
 ---
 
-## 📊 Kết quả Backtest Lịch sử 8 Năm (2018 - 2026)
+## 🚀 Các Tính Năng Cao Cấp Vừa Được Nâng Cấp
 
-Hệ thống đã được backtest nghiêm ngặt theo **luật thanh toán T+2.5 của thị trường chứng khoán Việt Nam**:
-* Cổ phiếu về tài khoản sau chiều $T+2$, bán sớm nhất tại $T+3$.
-* Ràng buộc biên độ trần/sàn (không mua khi trần cứng trắng bên bán, không bán khi sàn cứng).
-* Phí giao dịch và thuế thực tế: **0.40% round-trip** (0.15% mua + 0.15% bán + 0.1% thuế).
+### 1. 📊 Tự Động Vẽ & Bắn Ảnh Biểu Đồ Kỹ Thuật Vào Telegram
+* Khi phát hiện tín hiệu mua, bot tự động vẽ **biểu đồ nến Nhật 60 phiên** kèm dải Bollinger Bands, EMA9, cột khối lượng Volume nổi bật và các đường gióng mục tiêu:
+  * Đường xanh lá đứt đoạn: **Mục tiêu Chốt lời TP (+5.5% đến +6%)**.
+  * Đường đỏ đứt đoạn: **Ngưỡng Dừng lỗ SL (-4.0%)**.
+* Ảnh chart được gửi trực tiếp vào Telegram cùng tin nhắn phân tích, giúp khách hàng quan sát trực quan trước khi ra quyết định.
 
-### 1. Chế độ Tối ưu Winrate Cao (`High-Winrate Trend Pullback`):
-* **Chiến lược**: Trong xu hướng tăng vững chắc (Giá > SMA50, SMA20 dốc lên, EMA9 >= SMA20), cổ phiếu điều chỉnh ngắn hạn với **volume cạn kiệt** (`vol < vol_ma * 0.9`), sau đó kiểm định trục giữa SMA20 và xuất hiện **nến xanh bật tăng dứt khoát** kèm dòng tiền quay trở lại (`vol_ratio >= 1.15`).
-* **Win Rate**: **~60.0%**
-* **Profit Factor**: **1.64 - 1.76**
-* **Lợi nhuận trung bình ròng mỗi lệnh**: **+1.05% - +1.13%** (đã trừ phí thuế)
-* **Kỳ vọng chốt lời (TP)**: **+5% đến +6%** (hoặc chốt khi giá tiệm cận Upper Band `%B >= 0.85`)
-* **Dừng lỗ (SL)**: **-3.5% đến -4.0%** (ngay dưới đáy nến nảy hoặc trục giữa)
-* **Thời gian giữ lệnh tối đa**: **8 phiên** (T+8 ~ 1.5 tuần)
+### 2. 🧠 Bộ Lọc Xu Hướng Thị Trường Chung (VN-Index Regime Filter)
+* Tự động phân loại trạng thái chỉ số VN-Index:
+  * 🟢 **BULL (Thuận lợi)**: VN-Index > SMA50 và SMA20 dốc lên ➜ Mở vị thế bình thường (20-25% NAV/mã).
+  * 🟡 **NEUTRAL (Thận trọng)**: Thị trường giằng co ➜ Hạ quy mô lệnh xuống 10-15% NAV.
+  * 🔴 **BEAR (Phòng thủ)**: VN-Index gãy SMA50 kèm SMA20 dốc xuống ➜ **Tự động khóa lệnh mua mới**, bảo vệ 100% tiền mặt cho khách hàng.
 
-### 2. Chế độ Đa Dạng Bối Cảnh (`Multi-Setup`):
-* Kích hoạt cả 3 thiết lập:
-  * **Squeeze Breakout**: Thắt nút cổ chai cực hẹp rồi bùng nổ vượt dải kèm khối lượng lớn (> 200% MA20).
-  * **Trend Pullback**: Hồi quy trục giữa trong Uptrend.
-  * **Oversold Reversal**: Bắt nhịp hồi sau khi giá rơi sâu thủng dải dưới và rút chân trở lại vào dải.
+### 3. 🎯 Quản Lý Vị Thế Realtime & Chốt Lời Từng Phần (Scale-out)
+* **Theo dõi vị thế đang mở:** Tự động theo dõi các mã đã khuyến nghị (`data/active_positions.json`).
+* **Kịch bản Chốt lời từng phần (TP1)**:
+  * Khi cổ phiếu chạm mốc +5.5% đến +6%: Bot bắn thông báo **Chốt lời trước 50% khối lượng**.
+  * **50% còn lại**: Nâng điểm dừng lỗ lên đúng **Giá vốn** (Breakeven - rủi ro bằng 0) và thả trôi gồng lãi bám theo đường EMA9 để đón siêu sóng (+15% - 25%).
+* **Cảnh báo Cắt lỗ & Hết hạn T+8**: Tự động thông báo nếu vi phạm SL hoặc giữ quá 8 phiên.
+
+### 4. 💻 Web Dashboard Quản Lý Khuyến Nghị Trực Quan
+* Chạy bảng điều khiển web trực tiếp bằng Streamlit:
+  ```bash
+  streamlit run dashboard.py
+  ```
+* Xem danh mục khuyến nghị đang mở, hiệu suất 8 năm, tra cứu biểu đồ kỹ thuật của bất kỳ mã nào trong VN100 và tạo báo cáo tháng cho khách hàng chỉ với 1 cú click chuột!
 
 ---
 
-## 🛠️ Cài đặt & Chạy Cục bộ
+## 🛠️ Hướng Dẫn Sử Dụng Cục Bộ
 
-### 1. Khởi tạo môi trường ảo
 ```bash
-python3 -m venv ~/.venv
+# 1. Kích hoạt môi trường ảo
 source ~/.venv/bin/activate
-pip install -r requirements.txt
+
+# 2. Quét tín hiệu thị trường hôm nay
+python src/scanner.py
+
+# 3. Xuất báo cáo hiệu suất tháng bất kỳ
+python src/monthly_report.py --month 2026-08
+
+# 4. Mở Web Dashboard
+streamlit run dashboard.py
 ```
-
-### 2. Cấu hình file `.env`
-Sao chép file `.env.example` thành `.env`:
-```bash
-cp .env.example .env
-```
-Mở file `.env` và điền:
-* `VNSTOCK_API_KEY`: API Key miễn phí lấy tại https://vnstocks.com/account#api-key (giúp tăng tốc độ tải lên 60 req/phút). Nếu là tài khoản Guest có thể để trống.
-* `TELEGRAM_BOT_TOKEN`: Token của bot tạo từ `@BotFather` trên Telegram.
-* `TELEGRAM_CHAT_ID`: ID chat của bạn lấy từ `@userinfobot` trên Telegram.
-
-### 3. Tải dữ liệu lịch sử VN100
-```bash
-python src/data_loader.py
-```
-*(Dữ liệu được lưu cache trong thư mục `data/` dạng `.csv` để backtest siêu tốc).*
-
-### 4. Chạy Backtest & Tối ưu hóa tham số
-```bash
-python src/optimizer.py
-```
-
-### 5. Chạy Quét Tín Hiệu Thị Trường
-* Quét phiên hôm nay (chế độ Winrate cao):
-  ```bash
-  python src/scanner.py
-  ```
-* Quét đa bối cảnh (Multi-setup) trong 5 phiên gần nhất:
-  ```bash
-  python src/scanner.py --mode multi_setup --lookback 5
-  ```
-
----
-
-## 🤖 Đưa Bot Lên GitHub Auto Chạy Trong Phiên
-
-Dự án đã tích hợp sẵn **GitHub Actions Workflow** (`.github/workflows/daily_scanner.yml`). Bot sẽ tự động chạy trên máy chủ đám mây của GitHub theo lịch trình giao dịch:
-
-* **11:30 sáng** (Giờ VN - Kết thúc phiên sáng)
-* **14:15 chiều** (Giờ VN - Trước đợt khớp lệnh ATC để kịp theo dõi và đặt lệnh)
-* **15:05 chiều** (Giờ VN - Tổng kết sau khi đóng cửa thị trường)
-
-### Các bước cấu hình trên GitHub:
-1. Khởi tạo Git repository và đẩy code lên GitHub của bạn:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit VN100 BB trading bot"
-   git branch -M main
-   git remote add origin https://github.com/<your-username>/<your-repo>.git
-   git push -u origin main
-   ```
-2. Trên trang repository GitHub, vào **Settings** > **Secrets and variables** > **Actions**.
-3. Nhấp **New repository secret** và thêm 3 biến:
-   * `VNSTOCK_API_KEY`: API Key của vnstock (nếu có).
-   * `TELEGRAM_BOT_TOKEN`: Token bot Telegram của bạn.
-   * `TELEGRAM_CHAT_ID`: Chat ID Telegram của bạn.
-4. Xong! Bot sẽ tự động quét mã và bắn thông báo về Telegram của bạn trong từng phiên giao dịch mà không cần mở máy tính!

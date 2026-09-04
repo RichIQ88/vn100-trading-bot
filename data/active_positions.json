@@ -1,0 +1,26 @@
+[
+  {
+    "symbol": "KDC",
+    "entry_date": "2026-08-24",
+    "entry_price": 52.0,
+    "tp_target": 55.12,
+    "sl_target": 49.92,
+    "setup_name": "High-Winrate Trend Pullback",
+    "max_hold": 8,
+    "status": "OPEN",
+    "tp1_hit": false,
+    "history": []
+  },
+  {
+    "symbol": "MSB",
+    "entry_date": "2026-08-13",
+    "entry_price": 13.46,
+    "tp_target": 14.27,
+    "sl_target": 12.92,
+    "setup_name": "High-Winrate Trend Pullback",
+    "max_hold": 8,
+    "status": "OPEN",
+    "tp1_hit": false,
+    "history": []
+  }
+]
