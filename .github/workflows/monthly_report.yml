@@ -1,0 +1,43 @@
+name: VN100 Monthly Performance Report
+
+on:
+  schedule:
+    # Chạy vào 08:30 sáng (giờ VN, tức 01:30 UTC) vào ngày 1 hàng tháng
+    - cron: '30 1 1 * *'
+  workflow_dispatch: # Cho phép bấm chạy thủ công trên GitHub bất cứ lúc nào
+    inputs:
+      target_month:
+        description: 'Tháng cần xuất báo cáo (Định dạng YYYY-MM, ví dụ: 2026-08. Để trống sẽ tự động lấy tháng trước)'
+        required: false
+        default: ''
+
+jobs:
+  monthly_report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate and Send Monthly Report
+        env:
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "${{ github.event.inputs.target_month }}" ]; then
+            python src/monthly_report.py
+          else
+            python src/monthly_report.py --month "${{ github.event.inputs.target_month }}"
+          fi
