@@ -1,0 +1,13 @@
+Config_ID,Description,TP_Pct,SL_Pct,Max_Hold,Trades,WinRate,Profit_Factor,Avg_Return,Wins,Losses
+6,"Chỉ riêng Trend Pullback - TP +6%, SL -4%",+6.0%,-4.0%,10,597,48.07,1.17,0.34,287,310
+7,"Chỉ riêng Trend Pullback - TP +7%, SL -4%",+7.0%,-4.0%,10,597,46.06,1.19,0.39,275,322
+4,"TP +8%, SL -5%, Hold 12d",+8.0%,-5.0%,12,2907,44.72,1.01,0.03,1300,1607
+11,"Squeeze + Trend Pullback (TP +6%, SL -4%)",+6.0%,-4.0%,8,2475,44.08,0.92,-0.15,1091,1384
+1,"Chuẩn 3 Setup - TP +6%, SL -4%, Hold 8d",+6.0%,-4.0%,8,3228,43.87,0.91,-0.18,1416,1812
+10,Kết hợp Squeeze + Trend Pullback (Bỏ bắt đáy),+7.0%,-4.5%,10,2180,43.44,0.98,-0.03,947,1233
+5,"Scalping T+ cực nhanh - TP +5%, SL -3.5%, Hold 7d",+5.0%,-3.5%,7,3329,43.38,0.87,-0.24,1444,1885
+2,"Khắt khe Vol - TP +6%, SL -4%, Hold 10d",+6.0%,-4.0%,10,2670,43.07,0.93,-0.16,1150,1520
+8,"Chỉ riêng Squeeze Breakout - TP +6%, SL -4%",+6.0%,-4.0%,8,2092,42.54,0.85,-0.32,890,1202
+3,"TP +7%, SL -4%, Hold 10d",+7.0%,-4.0%,10,2723,41.46,0.95,-0.11,1129,1594
+12,"Squeeze + Trend Pullback (TP +8%, SL -4%, Hold 12d)",+8.0%,-4.0%,12,2160,41.11,1.02,0.05,888,1272
+9,"Chỉ riêng Oversold Reversal - TP +6%, SL -4%",+6.0%,-4.0%,8,481,39.09,0.75,-0.56,188,293

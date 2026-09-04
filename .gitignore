@@ -3,6 +3,3 @@
 __pycache__/
 *.pyc
 .DS_Store
-# Bỏ qua file dữ liệu cache nặng khi đẩy lên Git (hoặc giữ lại sample nếu muốn)
-data/*.csv
-!data/.gitkeep
