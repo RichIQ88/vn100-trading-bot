@@ -14,7 +14,7 @@ from strategy import generate_signals
 from chart_generator import generate_signal_chart
 from market_regime import get_market_regime
 from position_tracker import load_positions, add_new_position, save_positions
-from notifier import send_telegram_alert, send_telegram_photo
+from notifier import send_telegram_alert, send_telegram_alert_with_status, send_telegram_photo, get_telegram_credentials
 from monthly_report import generate_monthly_report
 from backtest import calculate_performance_metrics
 
@@ -46,6 +46,38 @@ regime = get_market_regime(update=False)
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**Trạng thái Thị trường:** {regime['color']} **{regime['label']}**")
 st.sidebar.info(f"**VN-Index:** {regime['close']:.2f} điểm\n\n**Hành động:** {regime['action']}")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📱 Trạng Thái Telegram Bot")
+tele_token, tele_chat = get_telegram_credentials()
+if tele_token and tele_chat:
+    masked_token = tele_token[:5] + "..." + tele_token[-4:] if len(tele_token) > 10 else "***"
+    st.sidebar.success(f"🟢 Đã nhận diện Bot (`{masked_token}`)")
+else:
+    st.sidebar.warning("⚠️ Chưa cấu hình Telegram Secrets")
+    with st.sidebar.expander("ℹ️ Hướng dẫn cài đặt Secrets"):
+        st.markdown("""
+        **Trên Streamlit Cloud:**
+        1. Nhấp menu `...` hoặc `Settings` góc phải
+        2. Chọn mục **Secrets**
+        3. Thêm:
+        ```toml
+        TELEGRAM_BOT_TOKEN = "token_cua_ban"
+        TELEGRAM_CHAT_ID = "chat_id_cua_ban"
+        ```
+        4. Bấm **Save**.
+        """)
+
+if st.sidebar.button("🔔 Test Gửi Tin Nhắn Telegram"):
+    with st.sidebar:
+        with st.spinner("Đang gửi tin thử nghiệm..."):
+            ok_test, msg_test = send_telegram_alert_with_status(
+                "🔔 <b>[VN100 BOT TEST]</b> Kết nối Telegram từ Web Dashboard thành công 100%!"
+            )
+            if ok_test:
+                st.success("✅ Đã gửi thành công! Hãy kiểm tra Telegram.")
+            else:
+                st.error(f"{msg_test}")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### ⚙️ Cài đặt Quét Tín hiệu")
@@ -211,9 +243,15 @@ with tab4:
 
     if btn_gen:
         with st.spinner("Đang tổng hợp dữ liệu tháng..."):
-            report_content = generate_monthly_report(target_month=sel_month, send_telegram=send_tele)
+            report_content = generate_monthly_report(target_month=sel_month, send_telegram=False)
             if report_content:
                 st.success(f"Báo cáo tháng {sel_month} đã sẵn sàng!")
                 st.code(report_content.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "").replace("<code>", "").replace("</code>", ""), language="markdown")
                 if send_tele:
-                    st.success("Đã gửi tin nhắn báo cáo vào Telegram thành công!")
+                    ok_send, send_msg = send_telegram_alert_with_status(report_content)
+                    if ok_send:
+                        st.success("✅ Đã gửi tin nhắn báo cáo vào Telegram thành công!")
+                    else:
+                        st.error(f"❌ Không thể gửi tới Telegram:\n\n{send_msg}")
+            else:
+                st.warning(f"Không có dữ liệu hoặc không phát sinh giao dịch nào trong tháng {sel_month}.")

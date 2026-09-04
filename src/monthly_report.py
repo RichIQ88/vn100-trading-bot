@@ -83,7 +83,7 @@ def generate_monthly_report(target_month=None, send_telegram=True):
         print(f"[i] Không có lệnh nào hoàn tất trong tháng {target_month}.")
         if send_telegram:
             send_telegram_alert(msg)
-        return None
+        return msg
 
     # Tính toán chỉ số thống kê
     metrics = calculate_performance_metrics(month_trades.to_dict('records'))

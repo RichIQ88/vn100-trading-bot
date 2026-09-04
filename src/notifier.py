@@ -5,20 +5,47 @@ from dotenv import load_dotenv
 # Tải cấu hình từ .env
 load_dotenv()
 
+def get_credential(key: str, default: str = "") -> str:
+    """Lấy cấu hình từ biến môi trường hoặc Streamlit Secrets (nếu chạy trên Streamlit Cloud)"""
+    val = os.getenv(key, "").strip()
+    if val:
+        return val
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and key in st.secrets:
+            val = str(st.secrets[key]).strip()
+            if val:
+                return val
+    except Exception:
+        pass
+    return default
+
+def get_telegram_credentials():
+    token = get_credential("TELEGRAM_BOT_TOKEN")
+    chat_id = get_credential("TELEGRAM_CHAT_ID")
+    return token, chat_id
+
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
-def send_telegram_alert(message: str) -> bool:
+def send_telegram_alert_with_status(message: str) -> tuple[bool, str]:
     """
-    Gửi tin nhắn văn bản HTML tới Telegram qua Bot API.
+    Gửi tin nhắn Telegram và trả về bộ (thành_công: bool, thông_báo_chi_tiết: str)
+    giúp người dùng và Dashboard biết chính xác nguyên nhân nếu thất bại.
     """
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[!] Chưa cấu hình TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID trong .env")
-        return False
+    token, chat_id = get_telegram_credentials()
+    if not token or not chat_id:
+        err = (
+            "Chưa cấu hình TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID.\n"
+            "• Nếu đang chạy trên Streamlit Cloud: Vào App Settings > Secrets và thêm TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID.\n"
+            "• Nếu chạy Local: Tạo file .env và điền 2 thông số này."
+        )
+        print(f"[!] {err}")
+        return False, err
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "text": message,
         "parse_mode": "HTML",
         "disable_web_page_preview": True
@@ -28,29 +55,54 @@ def send_telegram_alert(message: str) -> bool:
         resp = requests.post(url, json=payload, timeout=10)
         if resp.status_code == 200:
             print("[✓] Đã gửi thông báo Telegram thành công!")
-            return True
+            return True, "Gửi tin nhắn Telegram thành công!"
+        elif resp.status_code == 403:
+            err = (
+                "Lỗi Telegram 403 (Forbidden): Bot không được phép gửi tin nhắn trước cho bạn!\n"
+                "👉 Cách khắc phục: Mở ứng dụng Telegram, tìm tên Bot của bạn và bấm START (hoặc gửi 1 tin nhắn bất kỳ cho Bot) rồi thử lại."
+            )
+            print(f"[-] {err}\nChi tiết: {resp.text}")
+            return False, err
+        elif resp.status_code == 400:
+            err = f"Lỗi Telegram 400 (Bad Request): Chat ID không hợp lệ hoặc định dạng tin nhắn sai. Chi tiết: {resp.text}"
+            print(f"[-] {err}")
+            return False, err
+        elif resp.status_code == 401:
+            err = "Lỗi Telegram 401 (Unauthorized): TELEGRAM_BOT_TOKEN không chính xác. Hãy kiểm tra lại token từ @BotFather."
+            print(f"[-] {err}")
+            return False, err
         else:
-            print(f"[-] Gửi Telegram thất bại: {resp.text}")
-            return False
+            err = f"Lỗi Telegram HTTP {resp.status_code}: {resp.text}"
+            print(f"[-] {err}")
+            return False, err
     except Exception as e:
-        print(f"[-] Lỗi kết nối Telegram: {e}")
-        return False
+        err = f"Lỗi kết nối mạng tới máy chủ Telegram: {e}"
+        print(f"[-] {err}")
+        return False, err
+
+def send_telegram_alert(message: str) -> bool:
+    """
+    Gửi tin nhắn văn bản HTML tới Telegram qua Bot API (Trả về bool để tương thích ngược).
+    """
+    success, _ = send_telegram_alert_with_status(message)
+    return success
 
 def send_telegram_photo(photo_path: str, caption: str = "") -> bool:
     """
     Gửi ảnh biểu đồ kỹ thuật kèm chú thích HTML tới Telegram.
     """
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[!] Chưa cấu hình TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID trong .env")
+    token, chat_id = get_telegram_credentials()
+    if not token or not chat_id:
+        print("[!] Chưa cấu hình TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID")
         return False
 
     if not photo_path or not os.path.exists(photo_path):
         print(f"[-] Không tìm thấy file ảnh: {photo_path}")
         return False
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
     data = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "caption": caption,
         "parse_mode": "HTML"
     }
