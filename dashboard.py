@@ -9,11 +9,12 @@ import matplotlib.pyplot as plt
 
 # Thêm src vào đường dẫn hệ thống
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
-from indicators import compute_indicators
+from indicators import compute_indicators, add_relative_strength
 from strategy import generate_signals
 from chart_generator import generate_signal_chart
 from market_regime import get_market_regime
-from position_tracker import load_positions, add_new_position, save_positions
+from position_tracker import load_positions, add_new_position, save_positions, calculate_position_size
+from sector_data import get_sector, check_sector_limit, get_sector_breakdown
 from notifier import send_telegram_alert, send_telegram_alert_with_status, send_telegram_photo, get_telegram_credentials
 from monthly_report import generate_monthly_report
 from backtest import calculate_performance_metrics
@@ -80,22 +81,39 @@ if st.sidebar.button("🔔 Test Gửi Tin Nhắn Telegram"):
                 st.error(f"{msg_test}")
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### 🤖 Trợ Lý Telegram 2 Chiều")
+st.sidebar.caption("Nhắn tin trực tiếp với bot để nhận phản hồi sau 2s:")
+st.sidebar.markdown("""
+• `/scan`: Quét cơ hội mua toàn thị trường
+• `FPT` hoặc `/chart SSI`: Gửi biểu đồ kỹ thuật tức thì
+• `/pos`: Xem danh mục vị thế đang mở
+• `/market`: Cập nhật xu hướng VN-Index
+• `/calc 500 FPT`: Tính khối lượng mua theo NAV
+""")
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("### ⚙️ Cài đặt Quét Tín hiệu")
-scan_mode = st.sidebar.selectbox("Chế độ Chiến lược", ["high_winrate", "multi_setup"], index=0, help="high_winrate: 3-4 lệnh/tháng tối ưu winrate | multi_setup: bắt cả breakout và bắt đáy")
+scan_mode = st.sidebar.selectbox(
+    "Chế độ Chiến lược",
+    ["leader_alpha", "high_winrate", "multi_setup"],
+    index=0,
+    help="leader_alpha: Tối ưu Winrate đỉnh cao với RS Leader & Smart Money CMF | high_winrate: 3-4 lệnh/tháng | multi_setup: bắt cả breakout và bắt đáy"
+)
 lookback_days = st.sidebar.slider("Số phiên quét gần nhất", min_value=1, max_value=10, value=3)
 
 # ----------------- MAIN TABS -----------------
 st.markdown('<div class="main-header">🚀 HỆ THỐNG CỐ VẤN GIAO DỊCH VN100</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Quản lý khuyến nghị, theo dõi vị thế T+ và giám sát hiệu suất đầu tư thời gian thực</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Quản lý khuyến nghị, tối ưu hóa điểm vào RS Leader, quản trị rủi ro danh mục và định cỡ vị thế</div>', unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4 = st.tabs([
-    "💼 Vị Thế Đang Mở (Live Positions)",
-    "🔔 Quét Tín Hiệu & Xem Chart",
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "💼 Vị Thế Đang Mở & Ngành",
+    "🔔 Quét Tín Hiệu (RS Leader)",
+    "💰 Quản Trị Vốn (Position Sizer)",
     "📊 Hiệu Suất Hệ Thống (8 Năm)",
-    "📜 Báo Cáo Tháng Cho Khách Hàng"
+    "📜 Báo Cáo Tháng Khách Hàng"
 ])
 
-# ----------------- TAB 1: LIVE POSITIONS -----------------
+# ----------------- TAB 1: LIVE POSITIONS & SECTOR -----------------
 with tab1:
     st.markdown("### 💼 Danh mục Khuyến nghị Đang Theo dõi")
     positions = load_positions()
@@ -108,20 +126,38 @@ with tab1:
 
     if open_pos:
         df_open = pd.DataFrame(open_pos)
+        if 'sector' not in df_open.columns:
+            df_open['sector'] = df_open['symbol'].apply(get_sector)
+        if 'shares' not in df_open.columns:
+            df_open['shares'] = 0
+
         st.dataframe(
-            df_open[['symbol', 'entry_date', 'entry_price', 'tp_target', 'sl_target', 'setup_name', 'tp1_hit']],
+            df_open[['symbol', 'sector', 'entry_date', 'entry_price', 'tp_target', 'sl_target', 'shares', 'setup_name', 'tp1_hit']],
             column_config={
                 "symbol": "Mã CP",
+                "sector": "Nhóm Ngành",
                 "entry_date": "Ngày Mua",
                 "entry_price": st.column_config.NumberColumn("Giá Vào (Vốn)", format="%.2f"),
-                "tp_target": st.column_config.NumberColumn("Mục Tiêu TP1", format="%.2f"),
+                "tp_target": st.column_config.NumberColumn("Mục Tiêu TP", format="%.2f"),
                 "sl_target": st.column_config.NumberColumn("Dừng Lỗ SL", format="%.2f"),
+                "shares": st.column_config.NumberColumn("Khối Lượng CP", format="%d"),
                 "setup_name": "Setup",
                 "tp1_hit": st.column_config.CheckboxColumn("Đã chốt 50% TP1?")
             },
             use_container_width=True,
             hide_index=True
         )
+
+        st.markdown("#### 🛡️ Cơ Cấu Phân Bổ Theo Ngành (Tối đa 2 mã/ngành)")
+        sec_breakdown = get_sector_breakdown(positions)
+        sec_cols = st.columns(min(len(sec_breakdown), 4) if sec_breakdown else 1)
+        for idx, (sec_name, count) in enumerate(sec_breakdown.items()):
+            col_idx = idx % len(sec_cols)
+            with sec_cols[col_idx]:
+                if count >= 2:
+                    st.warning(f"⚠️ **{sec_name}**: {count}/2 mã (Đã chạm trần!)")
+                else:
+                    st.success(f"✅ **{sec_name}**: {count}/2 mã (An toàn)")
     else:
         st.info("Hiện tại chưa có mã nào trong danh mục vị thế mở. Hãy chuyển sang Tab 'Quét Tín Hiệu' để tìm kiếm cơ hội mới!")
 
@@ -129,29 +165,42 @@ with tab1:
     st.markdown("#### ➕ Thêm Khuyến Nghị Thủ Công Vào Danh Mục")
     with st.expander("Nhấp vào đây để thêm mã khuyến nghị mới"):
         with st.form("add_pos_form"):
-            col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+            col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns(5)
             with col_f1:
                 f_sym = st.text_input("Mã cổ phiếu", value="FPT").upper()
             with col_f2:
-                f_price = st.number_input("Giá mua khuyến nghị", value=130.0, step=0.1)
+                f_price = st.number_input("Giá mua", value=130.0, step=0.1)
             with col_f3:
-                f_tp = st.number_input("Giá chốt lời TP1 (+6%)", value=round(f_price * 1.06, 2), step=0.1)
+                f_tp = st.number_input("Giá chốt lời TP", value=round(f_price * 1.06, 2), step=0.1)
             with col_f4:
-                f_sl = st.number_input("Giá cắt lỗ SL (-4%)", value=round(f_price * 0.96, 2), step=0.1)
+                f_sl = st.number_input("Giá cắt lỗ SL", value=round(f_price * 0.96, 2), step=0.1)
+            with col_f5:
+                f_shares = st.number_input("Khối lượng CP", value=1000, step=100)
             f_submit = st.form_submit_button("Thêm Vào Danh Mục Theo Dõi")
             if f_submit:
-                add_new_position(f_sym, pd.Timestamp.now().strftime("%Y-%m-%d"), f_price, f_tp, f_sl, "Manual Entry")
-                st.success(f"Đã thêm {f_sym} vào danh sách theo dõi vị thế!")
-                st.rerun()
+                ok_add, msg_add = add_new_position(
+                    f_sym,
+                    pd.Timestamp.now().strftime("%Y-%m-%d"),
+                    f_price,
+                    f_tp,
+                    f_sl,
+                    "Manual Entry",
+                    shares=f_shares
+                )
+                if ok_add:
+                    st.success(f"✅ {msg_add}")
+                    st.rerun()
+                else:
+                    st.error(f"❌ {msg_add}")
 
-# ----------------- TAB 2: SCANNER & CHARTS -----------------
+# ----------------- TAB 2: SCANNER & CHARTS (RS LEADER) -----------------
 with tab2:
-    st.markdown("### 🔔 Quét Tín Hiệu Thị Trường & Xem Biểu Đồ")
+    st.markdown("### 🔔 Quét Tín Hiệu Định Lượng & Biểu Đồ Kỹ Thuật")
     col_s1, col_s2 = st.columns([2, 3])
 
     with col_s1:
         if st.button("🚀 Kích Hoạt Quét Toàn Bộ VN100 Ngay", type="primary"):
-            with st.spinner("Đang tính toán 5 chỉ báo trên rổ VN100..."):
+            with st.spinner("Đang tính toán 5 chỉ báo, đo lường RS Leader và dòng tiền CMF..."):
                 files = glob.glob(os.path.join(DATA_DIR, "*.csv"))
                 files = [f for f in files if "optimization" not in f and "VNINDEX" not in f]
                 found = []
@@ -162,28 +211,37 @@ with tab2:
                         if len(df_s) < 35: continue
                         df_s['time'] = pd.to_datetime(df_s['time'])
                         df_ind = compute_indicators(df_s)
+                        df_ind = add_relative_strength(df_ind)
                         df_sig = generate_signals(df_ind, mode=scan_mode)
                         tail = df_sig.tail(lookback_days)
                         for idx, row in tail.iterrows():
                             if row['signal'] == 1:
                                 p = float(row['close'])
+                                atr_v = float(row.get('atr', p * 0.025)) if pd.notnull(row.get('atr')) else p * 0.025
+                                tp_dyn = round(p + 2.5 * atr_v, 2)
+                                sl_dyn = round(max(p - 1.5 * atr_v, p * 0.945), 2)
+                                rs_v = float(row.get('rs_score', 100.0))
+                                cmf_v = float(row.get('cmf', 0.0))
                                 found.append({
                                     'Mã': sym,
+                                    'Ngành': get_sector(sym),
                                     'Ngày': row['time'].strftime("%Y-%m-%d"),
                                     'Setup': row['setup_name'],
                                     'Giá Mua': p,
-                                    'Mục Tiêu TP (+6%)': round(p * 1.06, 2),
-                                    'Dừng Lỗ SL (-4%)': round(p * 0.96, 2),
-                                    'Vol/MA20': round(float(row['vol_ratio']), 2),
-                                    '%B': round(float(row['bb_pct_b']), 2)
+                                    'TP (ATR)': tp_dyn,
+                                    'SL (ATR)': sl_dyn,
+                                    'RS Leader': round(rs_v, 1),
+                                    'CMF Dòng Tiền': round(cmf_v, 2),
+                                    'Vol/MA20': round(float(row['vol_ratio']), 2)
                                 })
                     except Exception:
                         continue
                 if found:
-                    st.success(f"Tìm thấy {len(found)} tín hiệu mua thỏa mãn!")
+                    found = sorted(found, key=lambda x: x['RS Leader'], reverse=True)
+                    st.success(f"🎯 Tìm thấy {len(found)} tín hiệu mua thỏa mãn (Ưu tiên RS Leader cao nhất)!")
                     st.dataframe(pd.DataFrame(found), use_container_width=True, hide_index=True)
                 else:
-                    st.info("Không có mã nào đạt đủ tiêu chuẩn trong các phiên được chọn.")
+                    st.info("Không có mã nào đạt đủ tiêu chuẩn khắt khe trong các phiên được chọn.")
 
     st.markdown("---")
     st.markdown("#### 📈 Xem Biểu Đồ Kỹ Thuật Tương Tác Của Bất Kỳ Mã Nào")
@@ -196,16 +254,89 @@ with tab2:
             df_view = pd.read_csv(csv_p)
             df_view['time'] = pd.to_datetime(df_view['time'])
             df_view = compute_indicators(df_view)
-            last_p = float(df_view['close'].iloc[-1])
-            tp_est = round(last_p * 1.06, 2)
-            sl_est = round(last_p * 0.96, 2)
+            df_view = add_relative_strength(df_view)
+            last_row = df_view.iloc[-1]
+            last_p = float(last_row['close'])
+            atr_v = float(last_row.get('atr', last_p * 0.025))
+            tp_est = round(last_p + 2.5 * atr_v, 2)
+            sl_est = round(max(last_p - 1.5 * atr_v, last_p * 0.945), 2)
+            rs_val = float(last_row.get('rs_score', 100.0))
+            cmf_val = float(last_row.get('cmf', 0.0))
 
             chart_file = generate_signal_chart(df_view, selected_sym, tp_target=tp_est, sl_target=sl_est, lookback=60)
             if chart_file and os.path.exists(chart_file):
+                col_c1, col_c2, col_c3 = st.columns(3)
+                with col_c1:
+                    st.metric("Nhóm Ngành", get_sector(selected_sym))
+                with col_c2:
+                    st.metric("RS Score (vs VNINDEX)", f"{rs_val:.1f}", delta="Leader" if rs_val >= 102 else "Neutral")
+                with col_c3:
+                    st.metric("CMF Dòng Tiền (20 phiên)", f"{cmf_val:+.2f}", delta="Tích lũy" if cmf_val > 0 else "Phân phối")
                 st.image(chart_file, caption=f"Biểu đồ kỹ thuật {selected_sym} (Dải trên đỏ, Trục giữa xanh lam, Dải dưới xanh lá, EMA9 vàng, TP/SL đứt đoạn)")
 
-# ----------------- TAB 3: PERFORMANCE METRICS -----------------
+# ----------------- TAB 3: POSITION SIZER & RISK CALCULATOR -----------------
 with tab3:
+    st.markdown("### 💰 Máy Tính Quản Trị Vốn & Định Cỡ Vị Thế (Position Sizer)")
+    st.caption("Công thức chuẩn quản trị rủi ro quỹ: Giới hạn mức lỗ tối đa 2% NAV mỗi lệnh và giải ngân <= 25% NAV/mã.")
+
+    col_rk1, col_rk2 = st.columns(2)
+    with col_rk1:
+        calc_nav_mil = st.number_input("Tổng quy mô vốn đầu tư (NAV - Triệu VNĐ):", value=500.0, step=50.0)
+        calc_risk_pct = st.slider("Mức chịu rủi ro tối đa mỗi lệnh (% NAV):", min_value=1.0, max_value=3.0, value=2.0, step=0.5)
+        calc_sym = st.selectbox("Chọn mã cổ phiếu dự định mua:", all_csvs, index=all_csvs.index("FPT") if "FPT" in all_csvs else 0)
+
+    # Đọc giá hiện tại của mã được chọn
+    c_csv = os.path.join(DATA_DIR, f"{calc_sym}.csv")
+    if os.path.exists(c_csv):
+        df_c = pd.read_csv(c_csv)
+        df_c = compute_indicators(df_c)
+        cur_p = float(df_c['close'].iloc[-1])
+        cur_atr = float(df_c['atr'].iloc[-1]) if pd.notnull(df_c['atr'].iloc[-1]) else cur_p * 0.025
+        sug_tp = round(cur_p + 2.5 * cur_atr, 2)
+        sug_sl = round(max(cur_p - 1.5 * cur_atr, cur_p * 0.945), 2)
+    else:
+        cur_p, sug_tp, sug_sl = 100.0, 106.0, 96.0
+
+    with col_rk2:
+        in_price = st.number_input("Giá mua dự kiến (Nghìn VNĐ):", value=cur_p, step=0.1)
+        in_sl = st.number_input("Giá cắt lỗ (SL - Nghìn VNĐ):", value=sug_sl, step=0.1)
+        in_tp = st.number_input("Giá chốt lời (TP - Nghìn VNĐ):", value=sug_tp, step=0.1)
+
+    nav_vnd = calc_nav_mil * 1_000_000.0
+    res_size = calculate_position_size(nav_vnd, in_price, in_sl, risk_pct=calc_risk_pct/100.0)
+
+    st.markdown("---")
+    st.markdown(f"#### 📊 Kế Hoạch Giải Ngân Khuyến Nghị Cho **{calc_sym}** ({get_sector(calc_sym)}):")
+    col_out1, col_out2, col_out3, col_out4 = st.columns(4)
+    with col_out1:
+        st.metric("Khối lượng nên mua", f"{res_size['shares']:,} CP", help="Đã làm tròn xuống lô 100 HOSE")
+    with col_out2:
+        st.metric("Tổng giá trị giải ngân", f"{res_size['capital_vnd']/1e6:,.1f} tr VNĐ", delta=f"{res_size['capital_pct']}% NAV")
+    with col_out3:
+        st.metric("Mức lỗ tối đa nếu chạm SL", f"{res_size['max_loss_vnd']/1e6:,.2f} tr VNĐ", delta=f"-{res_size['max_loss_pct']}% NAV (Rủi ro)")
+    with col_out4:
+        reward_vnd = res_size['shares'] * (in_tp - in_price) * 1000.0
+        rr_ratio = reward_vnd / res_size['max_loss_vnd'] if res_size['max_loss_vnd'] > 0 else 0.0
+        st.metric("Lợi nhuận kỳ vọng (TP)", f"{reward_vnd/1e6:,.2f} tr VNĐ", delta=f"R:R = {rr_ratio:.2f}")
+
+    if st.button(f"📥 Thêm {calc_sym} ({res_size['shares']:,} CP) vào Danh mục Vị thế mở"):
+        ok_a, msg_a = add_new_position(
+            calc_sym,
+            pd.Timestamp.now().strftime("%Y-%m-%d"),
+            in_price,
+            in_tp,
+            in_sl,
+            "Risk-Sized Position",
+            shares=res_size['shares']
+        )
+        if ok_a:
+            st.success(f"✅ {msg_a}")
+            st.rerun()
+        else:
+            st.warning(f"⚠️ {msg_a}")
+
+# ----------------- TAB 4: PERFORMANCE METRICS -----------------
+with tab4:
     st.markdown("### 📊 Tổng Kết Hiệu Suất Hệ Thống (Backtest 8 Năm)")
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
@@ -232,8 +363,8 @@ with tab3:
     ]
     st.dataframe(pd.DataFrame(yearly_data), use_container_width=True, hide_index=True)
 
-# ----------------- TAB 4: MONTHLY REPORT -----------------
-with tab4:
+# ----------------- TAB 5: MONTHLY REPORT -----------------
+with tab5:
     st.markdown("### 📜 Xuất Báo Cáo Hiệu Suất Tháng Cho Khách Hàng")
     col_rep1, col_rep2 = st.columns([1, 2])
     with col_rep1:

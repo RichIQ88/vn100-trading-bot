@@ -3,6 +3,7 @@ import json
 import pandas as pd
 from datetime import datetime
 from notifier import send_telegram_alert
+from sector_data import get_sector, check_sector_limit, get_sector_breakdown
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 POSITIONS_FILE = os.path.join(DATA_DIR, "active_positions.json")
@@ -23,21 +24,70 @@ def save_positions(positions):
     with open(POSITIONS_FILE, "w", encoding="utf-8") as f:
         json.dump(positions, f, ensure_ascii=False, indent=2)
 
-def add_new_position(symbol, entry_date, entry_price, tp_target, sl_target, setup_name, max_hold=8):
-    """Thêm một khuyến nghị mua mới vào danh sách theo dõi vị thế"""
-    positions = load_positions()
+def calculate_position_size(nav_vnd: float, entry_price_vnd: float, sl_price_vnd: float, risk_pct: float = 0.02, max_capital_pct: float = 0.25):
+    """
+    Tính toán quy mô vị thế theo mô hình Quản Trị Rủi Ro Chuyên Nghiệp:
+    - Rủi ro mỗi lệnh: risk_pct * NAV (mặc định 2% NAV)
+    - Số CP = Rủi ro / (Giá vào - Giá cắt lỗ)
+    - Làm tròn xuống lô 100 theo quy định HOSE
+    - Giới hạn vốn tối đa max_capital_pct * NAV (mặc định 25% NAV/mã)
+    """
+    if nav_vnd <= 0 or entry_price_vnd <= 0:
+        return {'shares': 0, 'capital_vnd': 0, 'capital_pct': 0.0, 'max_loss_vnd': 0}
+
+    # Đổi sang đơn vị nghìn đồng nếu giá dưới 1000 (ví dụ giá 72.6 -> 72,600 VNĐ)
+    p_in = entry_price_vnd * 1000.0 if entry_price_vnd < 1000 else entry_price_vnd
+    p_sl = sl_price_vnd * 1000.0 if sl_price_vnd < 1000 else sl_price_vnd
     
-    # Kiểm tra xem mã này đã có vị thế OPEN chưa
+    per_share_risk = max(p_in - p_sl, p_in * 0.03) # Tối thiểu 3% rủi ro
+    max_risk_vnd = nav_vnd * risk_pct
+    
+    raw_shares = max_risk_vnd / per_share_risk
+    lot_shares = int(raw_shares // 100) * 100
+    
+    # Kiểm tra trần tỷ trọng tối đa 25% NAV
+    max_allowed_capital = nav_vnd * max_capital_pct
+    if lot_shares * p_in > max_allowed_capital:
+        lot_shares = int((max_allowed_capital / p_in) // 100) * 100
+
+    capital_allocated = lot_shares * p_in
+    actual_risk_vnd = lot_shares * per_share_risk
+    
+    return {
+        'shares': lot_shares,
+        'entry_price_vnd': p_in,
+        'sl_price_vnd': p_sl,
+        'capital_vnd': capital_allocated,
+        'capital_pct': round((capital_allocated / nav_vnd) * 100.0, 2),
+        'max_loss_vnd': actual_risk_vnd,
+        'max_loss_pct': round((actual_risk_vnd / nav_vnd) * 100.0, 2)
+    }
+
+def add_new_position(symbol, entry_date, entry_price, tp_target, sl_target, setup_name, max_hold=8, shares=0, force=False):
+    """Thêm một khuyến nghị mua mới vào danh sách theo dõi vị thế kèm kiểm tra trần ngành"""
+    positions = load_positions()
+    symbol = symbol.upper().strip()
+    
+    # 1. Kiểm tra xem mã này đã có vị thế OPEN chưa
     for p in positions:
         if p['symbol'] == symbol and p['status'] == 'OPEN':
-            return False # Đã có vị thế đang mở
+            return False, f"Mã {symbol} hiện đang có một vị thế mở trước đó!"
 
+    # 2. Kiểm tra giới hạn phân bổ ngành (Sector Exposure Limit)
+    if not force:
+        can_buy, reason = check_sector_limit(positions, symbol, max_per_sector=2)
+        if not can_buy:
+            return False, reason
+
+    sector = get_sector(symbol)
     new_pos = {
         'symbol': symbol,
+        'sector': sector,
         'entry_date': entry_date,
         'entry_price': round(float(entry_price), 2),
         'tp_target': round(float(tp_target), 2),
         'sl_target': round(float(sl_target), 2),
+        'shares': int(shares),
         'setup_name': setup_name,
         'max_hold': max_hold,
         'status': 'OPEN',
@@ -46,8 +96,8 @@ def add_new_position(symbol, entry_date, entry_price, tp_target, sl_target, setu
     }
     positions.append(new_pos)
     save_positions(positions)
-    print(f"[✓] Đã thêm vị thế mới theo dõi: {symbol} tại giá {entry_price:.2f}")
-    return True
+    print(f"[✓] Đã thêm vị thế mới theo dõi: {symbol} ({sector}) tại giá {entry_price:.2f}")
+    return True, f"Thêm vị thế {symbol} ({sector}) thành công!"
 
 def update_and_alert_positions(latest_quotes):
     """

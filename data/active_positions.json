@@ -7,9 +7,12 @@
     "sl_target": 49.92,
     "setup_name": "High-Winrate Trend Pullback",
     "max_hold": 8,
-    "status": "OPEN",
+    "status": "CLOSED_TIME",
     "tp1_hit": false,
-    "history": []
+    "history": [],
+    "exit_date": "2026-09-04",
+    "exit_price": 51.5,
+    "final_pnl_pct": -1.3615384615384616
   },
   {
     "symbol": "MSB",
@@ -19,8 +22,11 @@
     "sl_target": 12.92,
     "setup_name": "High-Winrate Trend Pullback",
     "max_hold": 8,
-    "status": "OPEN",
+    "status": "CLOSED_TIME",
     "tp1_hit": false,
-    "history": []
+    "history": [],
+    "exit_date": "2026-09-04",
+    "exit_price": 13.2,
+    "final_pnl_pct": -2.3316493313521662
   }
 ]

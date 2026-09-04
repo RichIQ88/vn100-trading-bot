@@ -7,12 +7,13 @@ from datetime import datetime
 
 # Đảm bảo import được các module trong src/
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from indicators import compute_indicators
+from indicators import compute_indicators, add_relative_strength
 from strategy import generate_signals
 from notifier import send_telegram_alert, send_telegram_photo, format_signal_message
 from chart_generator import generate_signal_chart
 from market_regime import get_market_regime
 from position_tracker import add_new_position, update_and_alert_positions, load_positions
+from sector_data import get_sector, check_sector_limit
 from vnstock.api.quote import Quote
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
@@ -69,6 +70,7 @@ def scan_market(
                     pass
 
             df_ind = compute_indicators(df)
+            df_ind = add_relative_strength(df_ind)
             df_sig = generate_signals(df_ind, mode=mode)
 
             # Lưu lại giá mới nhất phục vụ theo dõi vị thế
@@ -87,20 +89,27 @@ def scan_market(
             for idx, row in check_rows.iterrows():
                 if row['signal'] == 1:
                     price = float(row['close'])
-                    target_tp = round(price * (1.0 + tp_pct), 2)
-                    target_sl = round(price * (1.0 - sl_pct), 2)
+                    atr_v = float(row.get('atr', price * 0.025)) if pd.notnull(row.get('atr')) else price * 0.025
+                    target_tp = round(price + 2.5 * atr_v, 2)
+                    target_sl = round(max(price - 1.5 * atr_v, price * 0.945), 2)
+                    rs_val = float(row.get('rs_score', 100.0))
+                    cmf_val = float(row.get('cmf', 0.0))
+                    sec_name = get_sector(sym)
 
                     sig_info = {
                         'symbol': sym,
+                        'sector': sec_name,
                         'setup': row['setup_name'],
                         'date': row['time'].strftime("%Y-%m-%d"),
                         'price': price,
                         'pct_b': round(float(row['bb_pct_b']), 2),
                         'bandwidth': round(float(row['bb_width']), 3),
                         'vol_ratio': round(float(row['vol_ratio']), 2),
-                        'tp_pct': tp_pct,
+                        'rs_score': round(rs_val, 1),
+                        'cmf': round(cmf_val, 2),
+                        'tp_pct': round((target_tp / price - 1.0), 3),
                         'target_tp': target_tp,
-                        'sl_pct': sl_pct,
+                        'sl_pct': round((1.0 - target_sl / price), 3),
                         'target_sl': target_sl,
                         'max_hold_days': max_hold_days,
                         'df_context': df_sig
@@ -115,9 +124,11 @@ def scan_market(
 
     # 3. XỬ LÝ VÀ BẮN TÍN HIỆU MUA MỚI KÈM ẢNH BIỂU ĐỒ
     if signals_found:
-        print(f"\n🎯 PHÁT HIỆN {len(signals_found)} TÍN HIỆU MUA MỚI:")
+        # Sắp xếp ưu tiên các mã Leader (RS cao nhất)
+        signals_found = sorted(signals_found, key=lambda x: x['rs_score'], reverse=True)
+        print(f"\n🎯 PHÁT HIỆN {len(signals_found)} TÍN HIỆU MUA MỚI (ƯU TIÊN RS LEADER):")
         df_disp = pd.DataFrame(signals_found)
-        print(df_disp[['symbol', 'date', 'setup', 'price', 'pct_b', 'vol_ratio', 'target_tp', 'target_sl']].to_string(index=False))
+        print(df_disp[['symbol', 'sector', 'date', 'setup', 'price', 'rs_score', 'cmf', 'target_tp', 'target_sl']].to_string(index=False))
 
         # Gửi tin nhắn tổng hợp qua Telegram
         msg = format_signal_message(signals_found)
@@ -125,8 +136,8 @@ def scan_market(
 
         # Tự động vẽ chart và gửi ảnh biểu đồ cho từng mã
         for s in signals_found:
-            # Ghi nhận mã vào danh mục theo dõi vị thế mở
-            add_new_position(
+            # Ghi nhận mã vào danh mục theo dõi vị thế mở (kiểm soát trần ngành)
+            success_add, msg_add = add_new_position(
                 symbol=s['symbol'],
                 entry_date=s['date'],
                 entry_price=s['price'],
@@ -135,6 +146,8 @@ def scan_market(
                 setup_name=s['setup'],
                 max_hold=max_hold_days
             )
+            if not success_add:
+                print(f"[i] Bỏ qua thêm tự động {s['symbol']}: {msg_add}")
 
             # Vẽ và gửi ảnh chart
             df_ctx = s.get('df_context')

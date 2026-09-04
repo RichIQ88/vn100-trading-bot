@@ -4,15 +4,18 @@ import numpy as np
 def simulate_trades(
     df: pd.DataFrame,
     symbol: str = "TICKER",
-    take_profit_pct: float = 0.08,     # +8% chốt lời
-    stop_loss_pct: float = 0.05,       # -5% cắt lỗ
+    take_profit_pct: float = 0.08,     # +8% chốt lời (nếu không dùng ATR)
+    stop_loss_pct: float = 0.05,       # -5% cắt lỗ (nếu không dùng ATR)
+    use_dynamic_atr: bool = True,      # Bật chốt lời/cắt lỗ động theo độ biến động ATR
+    tp_atr_mult: float = 2.5,          # TP = Entry + 2.5 * ATR
+    sl_atr_mult: float = 1.5,          # SL = Entry - 1.5 * ATR
     min_hold_days: int = 3,            # T+3 mới được bán (quy định VN)
     max_hold_days: int = 12,           # Tối đa 12-15 phiên (~2-3 tuần)
     fee_roundtrip_pct: float = 0.004,  # Phí 0.15% mua + 0.15% bán + 0.1% thuế = 0.4%
     entry_at: str = "next_open"        # 'next_open' hoặc 'signal_close'
 ):
     """
-    Mô phỏng giao dịch theo luật T+ thị trường Việt Nam
+    Mô phỏng giao dịch theo luật T+ thị trường Việt Nam kết hợp ngưỡng ATR động.
     """
     trades = []
     n = len(df)
@@ -24,6 +27,8 @@ def simulate_trades(
     entry_price = 0.0
     entry_date = None
     setup_name = ""
+    tp_target = 0.0
+    sl_target = 0.0
 
     for i in range(n - 1):
         # 1. Kiểm tra vào lệnh
@@ -47,6 +52,17 @@ def simulate_trades(
             entry_price = buy_price
             entry_date = buy_date
             setup_name = df.iloc[i]['setup_name']
+
+            # Tính toán ngưỡng TP và SL động theo ATR của phiên vào lệnh
+            if use_dynamic_atr and 'atr' in df.columns and pd.notnull(df.iloc[buy_idx]['atr']):
+                atr_val = float(df.iloc[buy_idx]['atr'])
+                tp_target = entry_price + tp_atr_mult * atr_val
+                # Cắt lỗ theo ATR nhưng khống chế mức lỗ tối đa không vượt quá -5.5% để bảo vệ vốn
+                sl_target = max(entry_price - sl_atr_mult * atr_val, entry_price * 0.945)
+            else:
+                tp_target = entry_price * (1.0 + take_profit_pct)
+                sl_target = entry_price * (1.0 - stop_loss_pct)
+
             continue
 
         # 2. Kiểm tra thoát lệnh nếu đang giữ hàng
@@ -64,10 +80,6 @@ def simulate_trades(
 
             exit_price = None
             exit_reason = ""
-
-            # Kiểm tra Take Profit
-            tp_target = entry_price * (1.0 + take_profit_pct)
-            sl_target = entry_price * (1.0 - stop_loss_pct)
 
             if curr_high >= tp_target:
                 # Chốt lời thành công tại giá mục tiêu TP
@@ -93,6 +105,8 @@ def simulate_trades(
                     'setup': setup_name,
                     'entry_date': entry_date,
                     'entry_price': entry_price,
+                    'tp_target': tp_target,
+                    'sl_target': sl_target,
                     'exit_date': curr_date,
                     'exit_price': exit_price,
                     'days_held': days_held,
@@ -152,5 +166,52 @@ def calculate_performance_metrics(trades_list):
         'loss_count': loss_count
     }
 
+def run_full_backtest(mode="leader_alpha", use_dynamic_atr=True, tp_atr_mult=2.5, sl_atr_mult=1.5):
+    """
+    Chạy backtest trên toàn bộ tập dữ liệu 8 năm (2018 - 2026) của rổ VN100
+    """
+    import os
+    import glob
+    import sys
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from indicators import compute_indicators, add_relative_strength
+    from strategy import generate_signals
+
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+    files = sorted(glob.glob(os.path.join(data_dir, "*.csv")))
+    files = [f for f in files if "optimization" not in f and "VNINDEX" not in f]
+
+    all_trades = []
+    for f in files:
+        sym = os.path.basename(f).replace(".csv", "")
+        try:
+            df = pd.read_csv(f)
+            if len(df) < 60:
+                continue
+            df['time'] = pd.to_datetime(df['time'])
+            df = compute_indicators(df)
+            df = add_relative_strength(df)
+            df = generate_signals(df, mode=mode)
+            trades = simulate_trades(
+                df,
+                symbol=sym,
+                use_dynamic_atr=use_dynamic_atr,
+                tp_atr_mult=tp_atr_mult,
+                sl_atr_mult=sl_atr_mult,
+                take_profit_pct=0.06,
+                stop_loss_pct=0.04,
+                min_hold_days=3,
+                max_hold_days=10
+            )
+            all_trades.extend(trades)
+        except Exception as e:
+            continue
+
+    metrics = calculate_performance_metrics(all_trades)
+    return metrics, all_trades
+
 if __name__ == "__main__":
-    print("Backtest engine loaded.")
+    print("Running 8-year backtest on VN100 universe...")
+    metrics, trades = run_full_backtest(mode="leader_alpha", use_dynamic_atr=True)
+    print("LEADER ALPHA + DYNAMIC ATR RESULTS:")
+    print(metrics)

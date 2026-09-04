@@ -129,19 +129,23 @@ def format_signal_message(signals_list: list) -> str:
         return "<b>[VN100 BOT]</b> Không có tín hiệu mua mới trong phiên hôm nay."
 
     msg = f"🔔 <b>[VN100 SCANNER] PHÁT HIỆN TÍN HIỆU MUA ({len(signals_list)} MÃ)</b>\n"
-    msg += f"<i>Khung: Daily | Chiến lược: Bollinger Bands + Volume + MA Trend</i>\n"
+    msg += f"<i>Khung: Daily | Chiến lược: Bollinger Bands + Volume + RS Leader</i>\n"
     msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
     for i, s in enumerate(signals_list, 1):
-        msg += f"<b>{i}. Mã: {s['symbol']}</b> (Setup: <code>{s['setup']}</code>)\n"
+        sec = s.get('sector', '')
+        sec_str = f" ({sec})" if sec else ""
+        rs_str = f" | RS: <code>{s['rs_score']}</code>" if 'rs_score' in s else ""
+        cmf_str = f" | CMF: <code>{s['cmf']:+.2f}</code>" if 'cmf' in s else ""
+        
+        msg += f"<b>{i}. Mã: {s['symbol']}</b>{sec_str} (Setup: <code>{s['setup']}</code>)\n"
         msg += f"• Giá vào: <b>{s['price']:.2f}</b>\n"
-        msg += f"• %B: <code>{s['pct_b']:.2f}</code> | BB Width: <code>{s['bandwidth']:.3f}</code>\n"
-        msg += f"• Khối lượng nảy: <code>{s['vol_ratio']:.1f}x MA20</code>\n"
-        msg += f"• Mục tiêu Chốt lời (+{s['tp_pct']*100:.1f}%): <b>{s['target_tp']:.2f}</b> (Chốt 50%)\n"
-        msg += f"• Ngưỡng Dừng lỗ (-{s['sl_pct']*100:.1f}%): <b>{s['target_sl']:.2f}</b>\n"
-        msg += f"• Thời gian nắm giữ tối đa: <b>{s['max_hold_days']} phiên (T+)</b>\n\n"
+        msg += f"• %B: <code>{s['pct_b']:.2f}</code> | Khối lượng: <code>{s['vol_ratio']:.1f}x MA20</code>{rs_str}{cmf_str}\n"
+        msg += f"• Mục tiêu Chốt lời (TP): <b>{s['target_tp']:.2f}</b> (+{s['tp_pct']*100:.1f}%) [Chốt 50%]\n"
+        msg += f"• Ngưỡng Cắt lỗ (SL): <b>{s['target_sl']:.2f}</b> (-{s['sl_pct']*100:.1f}%)\n"
+        msg += f"• Thời gian nắm giữ: <b>{s['max_hold_days']} phiên (T+)</b>\n\n"
 
-    msg += "⚠️ <i>Khuyến nghị: Quản trị vốn tối đa 20-25% NAV/mã. Chốt lời 50% tại dải trên, 50% còn lại gồng lãi theo EMA9.</i>"
+    msg += "⚠️ <i>Khuyến nghị: Quản trị rủi ro tối đa 2% NAV/mã (hoặc giải ngân <= 25% NAV/mã). Tối đa 2 mã/ngành.</i>"
     return msg
 
 if __name__ == "__main__":

@@ -57,6 +57,39 @@ def generate_signals(
 
     sig_pullback = uptrend & vol_dry & bounce_mid & pct_b_mid & vol_bounce & candle_str
 
+    # Tự động tính ATR và RS nếu chưa có
+    if 'atr' not in df.columns:
+        prev_close = df['close'].shift(1)
+        tr = pd.concat([df['high'] - df['low'], (df['high'] - prev_close).abs(), (df['low'] - prev_close).abs()], axis=1).max(axis=1)
+        df['atr'] = tr.rolling(14).mean()
+    if 'cmf' not in df.columns:
+        cl_diff = (df['close'] - df['low']) - (df['high'] - df['close'])
+        hl_diff = df['high'] - df['low']
+        mfm = np.where(hl_diff > 1e-9, cl_diff / hl_diff, 0.0)
+        df['cmf'] = np.where(df['volume'].rolling(20).sum() > 0, (pd.Series(mfm * df['volume'], index=df.index).rolling(20).sum()) / df['volume'].rolling(20).sum(), 0.0)
+    if 'rs_score' not in df.columns:
+        df['rs_score'] = 100.0
+        df['is_leader'] = True
+
+    # Khởi tạo các ngưỡng TP/SL động theo ATR
+    df['tp_target_dyn'] = df['close'] + 2.5 * df['atr']
+    df['sl_target_dyn'] = np.maximum(df['close'] - 1.5 * df['atr'], df['close'] * 0.945) # Chặn tối đa -5.5%
+
+    # --- CHẾ ĐỘ MỚI: LEADER ALPHA (Tối ưu Winrate đỉnh cao với RS & Smart Money) ---
+    if mode == "leader_alpha":
+        vol_dry = (df['volume'].shift(1) < df['vol_ma'].shift(1) * 1.05) | (df['volume'].shift(2) < df['vol_ma'].shift(2) * 1.05)
+        bounce_mid = (df['low'] <= df['bb_mid'] * 1.02) & (df['close'] > df['open']) & (df['close'] >= df['bb_mid'] * 0.995)
+        pct_b_mid = (df['bb_pct_b'] >= 0.45) & (df['bb_pct_b'] <= 0.75)
+        vol_bounce = df['vol_ratio'] >= 1.05
+        candle_str = (df['close'] - df['low']) >= (df['high'] - df['low'] + 1e-9) * 0.45
+        smart_money = df['cmf'] >= -0.03 # Dòng tiền lớn tích lũy hoặc không phân phối mạnh
+        rs_leader = df['rs_score'] >= 100.5 # Khỏe hơn VN-Index
+
+        sig_leader = uptrend & vol_dry & bounce_mid & pct_b_mid & vol_bounce & candle_str & smart_money & rs_leader
+        df.loc[sig_leader, 'signal'] = 1
+        df.loc[sig_leader, 'setup_name'] = "Leader RS Alpha Pullback"
+        return df
+
     if mode in ["high_winrate", "ultra_quality"]:
         df.loc[sig_pullback, 'signal'] = 1
         df.loc[sig_pullback, 'setup_name'] = "High-Winrate Trend Pullback"
